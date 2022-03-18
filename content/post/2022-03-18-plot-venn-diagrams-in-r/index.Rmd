@@ -1,0 +1,77 @@
+---
+title: Plot Venn Diagrams in R
+author: plumber
+date: '2022-03-18'
+slug: plot-venn-diagrams-in-r
+categories:
+  - learning
+tags:
+  - plot
+---
+
+# 1 Introduction
+
+A **Venn diagram** is an illustration that uses circles to show the relationships among things or finite groups of things. 
+
+In practice, It is helpful to observe set relations by Venn diagrams. This article will introduce some drawing methods in R.
+
+# 2 `ggVennDiagram`
+
+`ggVennDiagram` is developed by [gaospecial](https://github.com/gaospecial/ggVennDiagram). It maps the fill color of each region to quantity atuomatically. The `scale_fill_gradient()` in `ggplot2` serves to adjust the color. 
+
+- The parameter `category.names` is set names. 
+- the parameter `label` can label how many items are included in each parts. 
+- `label_alpha = 0` is to remove label background.
+
+```{r message=FALSE, warning=FALSE, fig.align = "center", fig.cap = "ggVennDiagram"}
+library(ggVennDiagram)
+library(ggplot2)
+
+# generate the data
+my_sample <- 1:1000
+set.seed(123)
+x <- list(A=sample(my_sample,300),
+          B=sample(my_sample,525),
+          C=sample(my_sample,440),
+          D=sample(my_sample,350))
+
+# draw 
+ggVennDiagram(x, 
+              edge_size = 0.8, 
+              category.names = c("type1", "type2", "type3", "type4"),
+              label = "count", 
+              label_alpha = 0) + 
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF") + 
+  theme(legend.position = "none")
+
+```
+
+The package developer also released an [online book](https://venn.bio-spring.top/) including so many useful techniques for drawing Venn.
+
+# 3 `nVennR`
+
+The other package recommended is `nVennR`, especially in handling many sets. It provides a powerful algorithm which can yield pleasing and informative Venn diagrams with proportionality information. 
+
+However, its output should be a *svg* file, so I find it hard to present it in Rmarkdown directly. 
+
+I prefer *Fig.2* to *Fig.1*. Because it provides more information about the set size although in cost of some simplicity.
+
+```{r}
+library(nVennR)
+
+names(x) <- c("type1","type2","type3", "type4")
+invisible(plotVenn(x, outFile="a.svg"))
+```
+
+
+
+```{r  fig.align = "center", fig.cap = "nVennR"}
+knitr::include_graphics("a.svg")
+```
+
+
+
+
+
+
+

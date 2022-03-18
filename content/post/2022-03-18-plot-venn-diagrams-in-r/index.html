@@ -1,0 +1,70 @@
+---
+title: Plot Venn Diagrams in R
+author: plumber
+date: '2022-03-18'
+slug: plot-venn-diagrams-in-r
+categories:
+  - learning
+tags:
+  - plot
+---
+
+
+
+<div id="introduction" class="section level1">
+<h1>1 Introduction</h1>
+<p>A <strong>Venn diagram</strong> is an illustration that uses circles to show the relationships among things or finite groups of things.</p>
+<p>In practice, It is helpful to observe set relations by Venn diagrams. This article will introduce some drawing methods in R.</p>
+</div>
+<div id="ggvenndiagram" class="section level1">
+<h1>2 <code>ggVennDiagram</code></h1>
+<p><code>ggVennDiagram</code> is developed by <a href="https://github.com/gaospecial/ggVennDiagram">gaospecial</a>. It maps the fill color of each region to quantity atuomatically. The <code>scale_fill_gradient()</code> in <code>ggplot2</code> serves to adjust the color.</p>
+<ul>
+<li>The parameter <code>category.names</code> is set names.</li>
+<li>the parameter <code>label</code> can label how many items are included in each parts.</li>
+<li><code>label_alpha = 0</code> is to remove label background.</li>
+</ul>
+<pre class="r"><code>library(ggVennDiagram)
+library(ggplot2)
+
+# generate the data
+my_sample &lt;- 1:1000
+set.seed(123)
+x &lt;- list(A=sample(my_sample,300),
+          B=sample(my_sample,525),
+          C=sample(my_sample,440),
+          D=sample(my_sample,350))
+
+# draw 
+ggVennDiagram(x, 
+              edge_size = 0.8, 
+              category.names = c(&quot;type1&quot;, &quot;type2&quot;, &quot;type3&quot;, &quot;type4&quot;),
+              label = &quot;count&quot;, 
+              label_alpha = 0) + 
+  scale_fill_gradient(low = &quot;#F4FAFE&quot;, high = &quot;#4981BF&quot;) + 
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-1"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-1-1.png" alt="ggVennDiagram" width="672" />
+<p class="caption">
+Figure 1: ggVennDiagram
+</p>
+</div>
+<p>The package developer also released an <a href="https://venn.bio-spring.top/">online book</a> including so many useful techniques for drawing Venn.</p>
+</div>
+<div id="nvennr" class="section level1">
+<h1>3 <code>nVennR</code></h1>
+<p>The other package recommended is <code>nVennR</code>, especially in handling many sets. It provides a powerful algorithm which can yield pleasing and informative Venn diagrams with proportionality information.</p>
+<p>However, its output should be a <em>svg</em> file, so I find it hard to present it in Rmarkdown directly.</p>
+<p>I prefer <em>Fig.2</em> to <em>Fig.1</em>. Because it provides more information about the set size although in cost of some simplicity.</p>
+<pre class="r"><code>library(nVennR)
+
+names(x) &lt;- c(&quot;type1&quot;,&quot;type2&quot;,&quot;type3&quot;, &quot;type4&quot;)
+invisible(plotVenn(x, outFile=&quot;a.svg&quot;))</code></pre>
+<pre class="r"><code>knitr::include_graphics(&quot;a.svg&quot;)</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-3"></span>
+<img src="a.svg" alt="nVennR"  />
+<p class="caption">
+Figure 2: nVennR
+</p>
+</div>
+</div>
