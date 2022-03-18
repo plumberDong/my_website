@@ -14,9 +14,9 @@ permalinks:
   post: /:year/:month/:day/:slug/
 menu:
   main:
-    - name: 知乎
+    - name: Zhihu
       url: https://www.zhihu.com/people/dong-shu-hao-99-75
-    - name: 关于我
+    - name: About me
       url: /about/
     - name: GitHub
       url: https://github.com/plumberDong
