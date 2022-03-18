@@ -54,7 +54,7 @@ The other package recommended is `nVennR`, especially in handling many sets. It 
 
 However, its output should be a *svg* file, so I find it hard to present it in Rmarkdown directly. 
 
-I prefer *Fig.2* to *Fig.1*. Because it provides more information about the set size although in cost of some simplicity.
+I prefer *Fig.2* to *Fig.1*. Because it provides more information about the set size although at the cost of some simplicity.
 
 ```{r}
 library(nVennR)
