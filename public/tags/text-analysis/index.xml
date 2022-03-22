@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Text Analysis on Plumber&#39;s Website</title>
+    <link>/tags/text-analysis/</link>
+    <description>Recent content in Text Analysis on Plumber&#39;s Website</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sun, 20 Mar 2022 00:00:00 +0000</lastBuildDate><atom:link href="/tags/text-analysis/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>用R对《知否知否》进行文本分析(一)</title>
+      <link>/2022/03/20/2022/</link>
+      <pubDate>Sun, 20 Mar 2022 00:00:00 +0000</pubDate>
+      
+      <guid>/2022/03/20/2022/</guid>
+      <description>本文所涉及的所有代码和文件参见：
+https://github.com/plumberDong/my_website/tree/main/content/post/2022-03-20-2022
+一、数据读取 除了jiebaR外，这里还用到了chinese.misc包，这是一个非常方便的中文分析辅助工具，相关指令参见Github。
+library(tidyverse) library(jiebaR) library(chinese.misc) library(showtext) library(knitr) library(ggsci) library(tidytext) library(ggraph) library(tidygraph) showtext_auto() 首先读取文本文档，转化成tibble格式，然后生成：
+ id1: 卷号 id2: 回号（每一卷开始重新计数） id3: 句子序号  # 读取后打散 dat &amp;lt;- scancn(&amp;quot;知否知否.txt&amp;quot;) dat &amp;lt;- str_split(dat, pattern = &amp;quot;\\s&amp;quot;)[[1]] # 去除空行，生成tibble dat &amp;lt;- dat[dat!=&amp;quot;&amp;quot;] %&amp;gt;% as_tibble() # 生成章\回\句号 dat &amp;lt;- dat %&amp;gt;% rename(text = value) %&amp;gt;% mutate(id1 = cumsum(str_detect(text, pattern = &amp;quot;^第.+卷|^最终卷&amp;quot;))) %&amp;gt;% group_by(id1) %&amp;gt;% mutate(id2 = cumsum(str_detect(text, pattern = &amp;quot;^第.+回&amp;quot;))) %&amp;gt;% filter(id2 != 0) %&amp;gt;% # 然后删除这些题目 filter(!</description>
+    </item>
+    
+  </channel>
+</rss>

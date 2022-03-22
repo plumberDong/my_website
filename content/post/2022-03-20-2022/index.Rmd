@@ -1,0 +1,349 @@
+---
+title: 用R对《知否知否》进行文本分析(一)
+author: Plumber
+date: '2022-03-20'
+slug: '2022'
+categories:
+  - learning
+tags:
+  - Text Analysis
+output: html_document
+---
+
+本文所涉及的所有代码和文件参见：
+
+https://github.com/plumberDong/my_website/tree/main/content/post/2022-03-20-2022
+
+# 一、数据读取
+
+除了`jiebaR`外，这里还用到了`chinese.misc`包，这是一个非常方便的中文分析辅助工具，相关指令参见[Github](https://github.com/githubwwwjjj/chinese.misc/blob/master/README.md)。
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(jiebaR)
+library(chinese.misc)
+library(showtext)
+library(knitr)
+library(ggsci)
+library(tidytext)
+library(ggraph)
+library(tidygraph)
+showtext_auto()
+```
+
+首先读取文本文档，转化成`tibble`格式，然后生成：
+
+- `id1`: 卷号
+- `id2`: 回号（每一卷开始重新计数）
+- `id3`: 句子序号
+
+```{r message=FALSE, warning=FALSE}
+# 读取后打散
+dat <- scancn("知否知否.txt")
+dat <- str_split(dat, pattern = "\\s")[[1]]
+
+# 去除空行，生成tibble
+dat <- dat[dat!=""] %>%
+  as_tibble()
+
+# 生成章\回\句号
+dat <- dat %>%
+  rename(text = value) %>%
+  mutate(id1 = cumsum(str_detect(text,
+                                     pattern = "^第.+卷|^最终卷"))) %>%
+  group_by(id1) %>%
+  mutate(id2 = cumsum(str_detect(text,
+                                     pattern = "^第.+回"))) %>%
+  filter(id2 != 0) %>%
+  # 然后删除这些题目
+  filter(!str_detect(text, patter = "^第.+卷|^最终卷|^第\\d+回")) %>%
+  # 生成句子编号
+  ungroup() %>%
+  mutate(id3 = row_number())
+```
+
+然后我们调用`chinese.misc`和`jiebaR`两个工具进行分词。分开的词会用空格隔开。
+
+注意，通过`worker(user = *.txt)`可以添加一个我们想划分的词表，比如这里需要设定一些人名。
+
+通过`stop_word`参数理论上可以自定义停止词（但不知道为什么，没有起作用，所以这里没有删去停止词，而是在后面手动清除）。
+
+```{r message=FALSE, warning=FALSE}
+# 创建分词工具
+mycutter <- worker(user = "知否_人名.txt") 
+
+# 进行分词
+dat <- dat %>%
+  mutate(text = seg_file(text, from = "v", mycutter = mycutter))
+
+head(dat)
+```
+
+由于不同词已经用空格分开了，所以我们调用英文处理包`tidytext`就可以了。这里用`unnest_tokens`将空格隔开的`text`进一步分割成独立的`word`。注意，`token`必须选择`str_split`。
+
+然后，可以用`anti_join`的方法剔除停止词，并用`gsub`替换并删除一些不需要的数字及字母。
+
+```{r}
+# 用tidytext::unnest_tokens将分词结果打散
+dat1 <- dat %>% 
+  tidytext::unnest_tokens(word, text, pattern = " ", token = stringr::str_split)
+
+
+# 读取并剔除stopwords
+my_stop <- read_lines("Chinese_StopWords.txt") %>%
+  as_tibble() %>%
+  rename(word = value)
+
+dat1 <- dat1 %>%
+  anti_join(my_stop, by = "word") %>%
+  # 替换掉数字和英文字母
+  mutate(word = gsub(pattern = "\\d+|[A-Za-z]+",replacement = "", x = word)) %>%
+  filter(word != "")
+
+rm(list = c("mycutter"))
+```
+
+
+看看哪些词出现次数最多:
+
+```{r fig.align="center", fig.cap="出现频次最高的十个词"}
+dat1 %>%
+  count(word, sort = TRUE) %>%
+  slice_max(n, n=15) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(x = NULL, y=NULL)
+```
+
+# 二、情感分析
+
+情感分析的核心逻辑扎根于词频，主要是基于我们定义的一些积极/消极词汇库，对包含这些词的文章段落进行赋分，最终计算出情感得分（当然，也有基于深度学习的更复杂的情感大粉工具，百度平台提供了一些相应的API，但这里没有涉及）。
+
+首先读取正面、负面词库
+
+```{r}
+positive_words <- read_lines("NTUSD_positive_simplified.txt")
+negative_words <- read_lines("NTUSD_negative_simplified.txt")
+```
+
+然后分小节统计情感值。一个小节的情感值为*积极词数量* - *消极词数量*。
+
+```{r message=FALSE, warning=FALSE, fig.align="center", fig.cap="各小节的情感分"}
+# 计算分数
+dat1 %>%
+  mutate(pos_flag = word %in% positive_words,
+         neg_flag = word %in% negative_words,
+         is_exist = pos_flag | neg_flag) %>%
+  filter(is_exist) %>%
+  select(-is_exist) %>%
+  mutate(across(ends_with("flag"), as.numeric)) %>%
+  mutate(score = 1 * pos_flag  - 1 * neg_flag) %>%
+  group_by(id1, id2) %>%
+  summarise(Sum = sum(score)) %>%
+  # 绘图
+  ggplot(aes(x = id2, y = Sum, fill = as.factor(id1))) +
+    geom_col(alpha = .8) + 
+    facet_wrap(~id1, scales = "free_x") + 
+    scale_fill_aaas(labels = c("第一章", "第二章", "第三章", "第四章", "最终章")) + 
+    labs(fill = NULL, y = "情感值", x = "节") 
+```
+
+
+我们也可不以小节，而以句子为单位。全文共有$20291$个句子，因此，不妨将100个句子视为一组，则有203组。由于我们是取余操作`%/%`来进行句子分段，因此编号区间为0-202。
+
+```{r message=FALSE, warning=FALSE, fig.align="center", fig.cap="各句段的情感分"}
+dat1 %>%
+  mutate(index = id3 %/% 100) %>%
+  mutate(pos_flag = word %in% positive_words,
+         neg_flag = word %in% negative_words,
+         is_exist = pos_flag | neg_flag) %>%
+  filter(is_exist) %>%
+  select(-is_exist) %>%
+  mutate(across(ends_with("flag"), as.numeric)) %>%
+  mutate(score = 1 * pos_flag  - 1 * neg_flag) %>%
+  group_by(index) %>%
+  summarise(Sum = sum(score)) %>%
+  # 绘图
+  ggplot(aes(x = index, y = Sum)) +
+    geom_col(alpha = .8) + 
+    geom_smooth(se = F) + 
+    labs(y = "情感值", x = "段") 
+```
+
+```{r}
+rm(list = c("positive_words", "negative_words"))
+```
+
+
+# 三、tf-idf 分析
+
+- **tf**(term frequency)：某词$i$在特定章$j$出现的频率，$t f_{i j}=\frac{n_{i, j}}{\sum_{k} n_{k, j}}$
+- **idf**(inverse document frequency): 出现某词的章数，与总章数比值的倒数的对数：$i d f( term_i )=\ln \left(\frac{n_{\text {documents }}}{n_{\text {documents containing term_i }}}\right)$。包含该词条的章越少，该值越大，说明该值的分辨力越好。
+- **tf-idf**就是上面两项的乘积。
+
+> The statistic **tf-idf** is intended to measure how important a word is to a document in a collection (or corpus) of documents
+
+根据各章分类统计词频：
+
+```{r message=FALSE, warning=FALSE}
+chapter_words <- dat1 %>%
+  group_by(id1) %>% # 按章来分
+  count(id1, word, sort = T)
+
+# 使用tidytext的bind_tf_idf命令来快捷计算
+chapter_tf_idf <- chapter_words %>%
+  bind_tf_idf(word, id1, n) %>%  # 依次是文本，章节和计数
+  arrange(desc(tf_idf))
+
+head(chapter_tf_idf)
+```
+
+我们可以对不同章节最重要的15个词进行可视化：
+
+```{r message=FALSE, warning=FALSE, fig.align="center", fig.cap="tf-idf对五个章节的统计结果"}
+chapter_tf_idf %>%
+  group_by(id1) %>%
+  slice_max(tf_idf, n = 15) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf), fill = as.factor(id1))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~id1, scales = "free") +
+  labs(x = "tf-idf", y = NULL) + 
+  scale_fill_aaas()
+```
+
+```{r}
+rm(list = c("chapter_words", "chapter_tf_idf"))
+```
+
+
+# 四、n元组
+
+其实就是分词的时候把前后两个词归到同一小组里面，我发现tidytext的`unnest_tokens`命令在这里并不适用。因为该命令无法考虑到我们自定义的词库（主要是人名），即仍会把同一个名字视为两个词。
+
+因此，这里进行手动生成（注意，我们先生成的二元组，然后剔除的停止词和其他乱七八糟的词）。
+
+```{r}
+dat2 <- dat %>%
+  # 分词
+  tidytext::unnest_tokens(word, text, pattern = " ", token = stringr::str_split) %>%
+  # 2元组
+  group_by(id3) %>%
+  rename(word1 = word) %>% # 第一个词
+  mutate(word2 = lead(word1)) %>% # 第二个词(其实就是第一个词向上移一位)
+  mutate(bigram = str_c(word1, word2, sep = " ")) %>% # 合并两个词
+  ungroup() %>%
+  # 清除停止词
+  anti_join(my_stop, by = c("word1" = "word")) %>%
+  anti_join(my_stop, by = c("word2" = "word")) %>%
+  # 去除停止词等乱七八糟的词
+  mutate(across(c(word1, word2), ~gsub(pattern = "\\d+|[A-Za-z]+",replacement = "", x =.))) %>% # 替换掉数字和英文字母
+  filter(word1 != "" | word2 == "")
+
+head(dat2)
+```
+
+可以统计一下出现最多的二元组:
+
+```{r}
+dat2 %>%
+  count(bigram, sort = TRUE) %>%
+  head(10)
+```
+
+这里完全可以将`bigram`当作单个词，从而进行`tf-idf`等分析。操作流程和之前一样，就不再演示了。
+
+基于`dat2`数据，我们也可以生成一个网络。网络的节点是词，边代表两个词在一个`bigram`中出现过，而边的粗细可以代表共同出现的次数。由于`word1`和`word2`存在顺序关系，所以这里最好生成有向图。
+
+```{r message=FALSE, warning=FALSE, message=FALSE, warning=FALSE, fig.align="center", fig.cap="词汇网络"}
+bigram_graph <- dat2 %>%
+  filter(!is.na(word2)) %>%
+  count(word1, word2, sort = TRUE) %>%
+  slice_max(order_by = n, n = 50) %>%
+  as_tbl_graph(directed = T)
+
+a <- grid::arrow(type = "closed", length = unit(2, "mm"))
+
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE, arrow = a,
+                 end_cap = circle(.1, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+```
+
+```{r}
+rm(list = c("dat2"))
+```
+
+# 五、词的共现
+
+另一个比较有趣的探索，是查看哪些词更可能在同一句话中出现，并据此计算不同词之间的相关性。通过`widyr`包中的`pairwise_count`函数，我们可以轻松计算不同`word`在同一句话`id3`出现的次数，并按从大到小进行排列:
+
+```{r message=FALSE, warning=FALSE}
+word_pairs <- dat1 %>%
+  group_by(word) %>%
+  filter(n() >= 200) %>% # 这里排除一些低频词，要不然计算量太大了
+  ungroup() %>%
+  widyr::pairwise_count(word, id3, sort = T)
+
+head(word_pairs)
+```
+
+下面看一下和明兰最常出现在一个句话中的10个词：
+
+```{r message=FALSE, warning=FALSE}
+word_pairs %>%
+  filter(item1 == "明兰") %>%
+  head(10)
+```
+
+通过`widyr`包中的`pairwise_cor`函数，可以计算不同词在同一句话`id3`中出现的$\phi$系数。该系数取值在0到1之间，取值越大，这两个词越倾向于在同一句话中出现。
+
+这是和盛紘相关性最强的十个人：
+
+```{r message=FALSE, warning=FALSE}
+rm(list = c("word_pairs"))
+
+word_cors <- dat1 %>%
+  group_by(word) %>%
+  filter(n() >= 200) %>%
+  widyr::pairwise_cor(word, id3, sort = TRUE)
+
+word_cors %>%
+  filter(item1 == "盛紘") %>% head(10)
+```
+
+下图则展现了与剧中六位人物相关性最强的6个词：
+
+```{r message = FALSE, warning=FALSE, message=FALSE, warning=FALSE, fig.align="center", fig.cap="与六位人物相关性最强的几个词"}
+word_cors %>%
+  filter(item1 %in% c("明兰", "顾廷烨", "盛紘", "老太太", "小桃", "王氏")) %>%
+  group_by(item1) %>%
+  slice_max(correlation, n = 6) %>%
+  ungroup() %>%
+  mutate(item2 = reorder(item2, correlation)) %>%
+  ggplot(aes(item2, correlation)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ item1, scales = "free_y") +
+  labs(y = NULL, x = "phi coefficient") + 
+  coord_flip()
+```
+
+同样,也可以用网络图来展现不同词的共现关系，并将共现的倾向（或者说$\phi$系数映射到边的透明度上）。
+
+```{r message = FALSE, warning=FALSE, message=FALSE, warning=FALSE, fig.align="center", fig.cap="不同词的共现情况"}
+word_cors %>%
+  filter(correlation > .08) %>%
+  as_tbl_graph() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = correlation), show.legend = FALSE) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_void()
+```
+
+
+

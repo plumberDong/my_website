@@ -1,0 +1,381 @@
+---
+title: 用R对《知否知否》进行文本分析(一)
+author: Plumber
+date: '2022-03-20'
+slug: '2022'
+categories:
+  - learning
+tags:
+  - Text Analysis
+output: html_document
+---
+
+
+
+<p>本文所涉及的所有代码和文件参见：</p>
+<p><a href="https://github.com/plumberDong/my_website/tree/main/content/post/2022-03-20-2022" class="uri">https://github.com/plumberDong/my_website/tree/main/content/post/2022-03-20-2022</a></p>
+<div id="一数据读取" class="section level1">
+<h1>一、数据读取</h1>
+<p>除了<code>jiebaR</code>外，这里还用到了<code>chinese.misc</code>包，这是一个非常方便的中文分析辅助工具，相关指令参见<a href="https://github.com/githubwwwjjj/chinese.misc/blob/master/README.md">Github</a>。</p>
+<pre class="r"><code>library(tidyverse)
+library(jiebaR)
+library(chinese.misc)
+library(showtext)
+library(knitr)
+library(ggsci)
+library(tidytext)
+library(ggraph)
+library(tidygraph)
+showtext_auto()</code></pre>
+<p>首先读取文本文档，转化成<code>tibble</code>格式，然后生成：</p>
+<ul>
+<li><code>id1</code>: 卷号</li>
+<li><code>id2</code>: 回号（每一卷开始重新计数）</li>
+<li><code>id3</code>: 句子序号</li>
+</ul>
+<pre class="r"><code># 读取后打散
+dat &lt;- scancn(&quot;知否知否.txt&quot;)
+dat &lt;- str_split(dat, pattern = &quot;\\s&quot;)[[1]]
+
+# 去除空行，生成tibble
+dat &lt;- dat[dat!=&quot;&quot;] %&gt;%
+  as_tibble()
+
+# 生成章\回\句号
+dat &lt;- dat %&gt;%
+  rename(text = value) %&gt;%
+  mutate(id1 = cumsum(str_detect(text,
+                                     pattern = &quot;^第.+卷|^最终卷&quot;))) %&gt;%
+  group_by(id1) %&gt;%
+  mutate(id2 = cumsum(str_detect(text,
+                                     pattern = &quot;^第.+回&quot;))) %&gt;%
+  filter(id2 != 0) %&gt;%
+  # 然后删除这些题目
+  filter(!str_detect(text, patter = &quot;^第.+卷|^最终卷|^第\\d+回&quot;)) %&gt;%
+  # 生成句子编号
+  ungroup() %&gt;%
+  mutate(id3 = row_number())</code></pre>
+<p>然后我们调用<code>chinese.misc</code>和<code>jiebaR</code>两个工具进行分词。分开的词会用空格隔开。</p>
+<p>注意，通过<code>worker(user = *.txt)</code>可以添加一个我们想划分的词表，比如这里需要设定一些人名。</p>
+<p>通过<code>stop_word</code>参数理论上可以自定义停止词（但不知道为什么，没有起作用，所以这里没有删去停止词，而是在后面手动清除）。</p>
+<pre class="r"><code># 创建分词工具
+mycutter &lt;- worker(user = &quot;知否_人名.txt&quot;) 
+
+# 进行分词
+dat &lt;- dat %&gt;%
+  mutate(text = seg_file(text, from = &quot;v&quot;, mycutter = mycutter))
+
+head(dat)</code></pre>
+<pre><code>## # A tibble: 6 x 4
+##   text                                                           id1   id2   id3
+##   &lt;chr&gt;                                                        &lt;int&gt; &lt;int&gt; &lt;int&gt;
+## 1 有人 升官 了 有人 死 翘 了 还有 人 穿越 了                       1     1     1
+## 2 戌时 的 梆子 且 刚 敲过 泉州 盛府 陆陆续续 点上 灯火 西侧 院 正房 堂屋 内上 坐 着 一位 头发 花白 …     1     1     2
+## 3 祖宗 保佑 儿子 这次 考绩 评了 个 优 升迁 的 明旨 约 月底 可 下来 了 此时 初夏 盛紘 身着 一件 赭石…     1     1     3
+## 4 也 不枉 你 在 外头 熬 了 这些 年 从 六品 升上去 最是 艰难 过 了 这一关 你 也 算 得 是 中品 官员…     1     1     4
+## 5 耿世叔 已然 来信 报知 应该 是 登州 知州 盛紘 向来 为 人 谨慎 但 言及 此处 也 忍不住 流出 喜色…     1     1     5
+## 6 那可真 是 要 恭喜 老爷 了 素来 知州 一职 多 由 从 五品 但 当 你 一个 正 六品 可以 当一州 知州 不…     1     1     6</code></pre>
+<p>由于不同词已经用空格分开了，所以我们调用英文处理包<code>tidytext</code>就可以了。这里用<code>unnest_tokens</code>将空格隔开的<code>text</code>进一步分割成独立的<code>word</code>。注意，<code>token</code>必须选择<code>str_split</code>。</p>
+<p>然后，可以用<code>anti_join</code>的方法剔除停止词，并用<code>gsub</code>替换并删除一些不需要的数字及字母。</p>
+<pre class="r"><code># 用tidytext::unnest_tokens将分词结果打散
+dat1 &lt;- dat %&gt;% 
+  tidytext::unnest_tokens(word, text, pattern = &quot; &quot;, token = stringr::str_split)
+
+
+# 读取并剔除stopwords
+my_stop &lt;- read_lines(&quot;Chinese_StopWords.txt&quot;) %&gt;%
+  as_tibble() %&gt;%
+  rename(word = value)
+
+dat1 &lt;- dat1 %&gt;%
+  anti_join(my_stop, by = &quot;word&quot;) %&gt;%
+  # 替换掉数字和英文字母
+  mutate(word = gsub(pattern = &quot;\\d+|[A-Za-z]+&quot;,replacement = &quot;&quot;, x = word)) %&gt;%
+  filter(word != &quot;&quot;)
+
+rm(list = c(&quot;mycutter&quot;))</code></pre>
+<p>看看哪些词出现次数最多:</p>
+<pre class="r"><code>dat1 %&gt;%
+  count(word, sort = TRUE) %&gt;%
+  slice_max(n, n=15) %&gt;%
+  mutate(word = reorder(word, n)) %&gt;%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(x = NULL, y=NULL)</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-5"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-5-1.png" alt="出现频次最高的十个词" width="672" />
+<p class="caption">
+Figure 1: 出现频次最高的十个词
+</p>
+</div>
+</div>
+<div id="二情感分析" class="section level1">
+<h1>二、情感分析</h1>
+<p>情感分析的核心逻辑扎根于词频，主要是基于我们定义的一些积极/消极词汇库，对包含这些词的文章段落进行赋分，最终计算出情感得分（当然，也有基于深度学习的更复杂的情感大粉工具，百度平台提供了一些相应的API，但这里没有涉及）。</p>
+<p>首先读取正面、负面词库</p>
+<pre class="r"><code>positive_words &lt;- read_lines(&quot;NTUSD_positive_simplified.txt&quot;)
+negative_words &lt;- read_lines(&quot;NTUSD_negative_simplified.txt&quot;)</code></pre>
+<p>然后分小节统计情感值。一个小节的情感值为<em>积极词数量</em> - <em>消极词数量</em>。</p>
+<pre class="r"><code># 计算分数
+dat1 %&gt;%
+  mutate(pos_flag = word %in% positive_words,
+         neg_flag = word %in% negative_words,
+         is_exist = pos_flag | neg_flag) %&gt;%
+  filter(is_exist) %&gt;%
+  select(-is_exist) %&gt;%
+  mutate(across(ends_with(&quot;flag&quot;), as.numeric)) %&gt;%
+  mutate(score = 1 * pos_flag  - 1 * neg_flag) %&gt;%
+  group_by(id1, id2) %&gt;%
+  summarise(Sum = sum(score)) %&gt;%
+  # 绘图
+  ggplot(aes(x = id2, y = Sum, fill = as.factor(id1))) +
+    geom_col(alpha = .8) + 
+    facet_wrap(~id1, scales = &quot;free_x&quot;) + 
+    scale_fill_aaas(labels = c(&quot;第一章&quot;, &quot;第二章&quot;, &quot;第三章&quot;, &quot;第四章&quot;, &quot;最终章&quot;)) + 
+    labs(fill = NULL, y = &quot;情感值&quot;, x = &quot;节&quot;) </code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-7"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-7-1.png" alt="各小节的情感分" width="672" />
+<p class="caption">
+Figure 2: 各小节的情感分
+</p>
+</div>
+<p>我们也可不以小节，而以句子为单位。全文共有<span class="math inline">\(20291\)</span>个句子，因此，不妨将100个句子视为一组，则有203组。由于我们是取余操作<code>%/%</code>来进行句子分段，因此编号区间为0-202。</p>
+<pre class="r"><code>dat1 %&gt;%
+  mutate(index = id3 %/% 100) %&gt;%
+  mutate(pos_flag = word %in% positive_words,
+         neg_flag = word %in% negative_words,
+         is_exist = pos_flag | neg_flag) %&gt;%
+  filter(is_exist) %&gt;%
+  select(-is_exist) %&gt;%
+  mutate(across(ends_with(&quot;flag&quot;), as.numeric)) %&gt;%
+  mutate(score = 1 * pos_flag  - 1 * neg_flag) %&gt;%
+  group_by(index) %&gt;%
+  summarise(Sum = sum(score)) %&gt;%
+  # 绘图
+  ggplot(aes(x = index, y = Sum)) +
+    geom_col(alpha = .8) + 
+    geom_smooth(se = F) + 
+    labs(y = &quot;情感值&quot;, x = &quot;段&quot;) </code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-8"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-8-1.png" alt="各句段的情感分" width="672" />
+<p class="caption">
+Figure 3: 各句段的情感分
+</p>
+</div>
+<pre class="r"><code>rm(list = c(&quot;positive_words&quot;, &quot;negative_words&quot;))</code></pre>
+</div>
+<div id="三tf-idf-分析" class="section level1">
+<h1>三、tf-idf 分析</h1>
+<ul>
+<li><strong>tf</strong>(term frequency)：某词<span class="math inline">\(i\)</span>在特定章<span class="math inline">\(j\)</span>出现的频率，<span class="math inline">\(t f_{i j}=\frac{n_{i, j}}{\sum_{k} n_{k, j}}\)</span></li>
+<li><strong>idf</strong>(inverse document frequency): 出现某词的章数，与总章数比值的倒数的对数：<span class="math inline">\(i d f( term_i )=\ln \left(\frac{n_{\text {documents }}}{n_{\text {documents containing term_i }}}\right)\)</span>。包含该词条的章越少，该值越大，说明该值的分辨力越好。</li>
+<li><strong>tf-idf</strong>就是上面两项的乘积。</li>
+</ul>
+<blockquote>
+<p>The statistic <strong>tf-idf</strong> is intended to measure how important a word is to a document in a collection (or corpus) of documents</p>
+</blockquote>
+<p>根据各章分类统计词频：</p>
+<pre class="r"><code>chapter_words &lt;- dat1 %&gt;%
+  group_by(id1) %&gt;% # 按章来分
+  count(id1, word, sort = T)
+
+# 使用tidytext的bind_tf_idf命令来快捷计算
+chapter_tf_idf &lt;- chapter_words %&gt;%
+  bind_tf_idf(word, id1, n) %&gt;%  # 依次是文本，章节和计数
+  arrange(desc(tf_idf))
+
+head(chapter_tf_idf)</code></pre>
+<pre><code>## # A tibble: 6 x 6
+## # Groups:   id1 [3]
+##     id1 word       n      tf   idf  tf_idf
+##   &lt;int&gt; &lt;chr&gt;  &lt;int&gt;   &lt;dbl&gt; &lt;dbl&gt;   &lt;dbl&gt;
+## 1     4 顾廷烨  1016 0.0114  0.223 0.00254
+## 2     2 李氏      76 0.00189 0.916 0.00174
+## 3     5 太夫人   542 0.00337 0.511 0.00172
+## 4     5 团哥儿   162 0.00101 1.61  0.00162
+## 5     4 秋娘     157 0.00176 0.916 0.00161
+## 6     5 顾廷烨  1097 0.00682 0.223 0.00152</code></pre>
+<p>我们可以对不同章节最重要的15个词进行可视化：</p>
+<pre class="r"><code>chapter_tf_idf %&gt;%
+  group_by(id1) %&gt;%
+  slice_max(tf_idf, n = 15) %&gt;%
+  ungroup() %&gt;%
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf), fill = as.factor(id1))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~id1, scales = &quot;free&quot;) +
+  labs(x = &quot;tf-idf&quot;, y = NULL) + 
+  scale_fill_aaas()</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-11"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-11-1.png" alt="tf-idf对五个章节的统计结果" width="672" />
+<p class="caption">
+Figure 4: tf-idf对五个章节的统计结果
+</p>
+</div>
+<pre class="r"><code>rm(list = c(&quot;chapter_words&quot;, &quot;chapter_tf_idf&quot;))</code></pre>
+</div>
+<div id="四n元组" class="section level1">
+<h1>四、n元组</h1>
+<p>其实就是分词的时候把前后两个词归到同一小组里面，我发现tidytext的<code>unnest_tokens</code>命令在这里并不适用。因为该命令无法考虑到我们自定义的词库（主要是人名），即仍会把同一个名字视为两个词。</p>
+<p>因此，这里进行手动生成（注意，我们先生成的二元组，然后剔除的停止词和其他乱七八糟的词）。</p>
+<pre class="r"><code>dat2 &lt;- dat %&gt;%
+  # 分词
+  tidytext::unnest_tokens(word, text, pattern = &quot; &quot;, token = stringr::str_split) %&gt;%
+  # 2元组
+  group_by(id3) %&gt;%
+  rename(word1 = word) %&gt;% # 第一个词
+  mutate(word2 = lead(word1)) %&gt;% # 第二个词(其实就是第一个词向上移一位)
+  mutate(bigram = str_c(word1, word2, sep = &quot; &quot;)) %&gt;% # 合并两个词
+  ungroup() %&gt;%
+  # 清除停止词
+  anti_join(my_stop, by = c(&quot;word1&quot; = &quot;word&quot;)) %&gt;%
+  anti_join(my_stop, by = c(&quot;word2&quot; = &quot;word&quot;)) %&gt;%
+  # 去除停止词等乱七八糟的词
+  mutate(across(c(word1, word2), ~gsub(pattern = &quot;\\d+|[A-Za-z]+&quot;,replacement = &quot;&quot;, x =.))) %&gt;% # 替换掉数字和英文字母
+  filter(word1 != &quot;&quot; | word2 == &quot;&quot;)
+
+head(dat2)</code></pre>
+<pre><code>## # A tibble: 6 x 6
+##     id1   id2   id3 word1 word2    bigram       
+##   &lt;int&gt; &lt;int&gt; &lt;int&gt; &lt;chr&gt; &lt;chr&gt;    &lt;chr&gt;        
+## 1     1     1     1 有人  升官     有人 升官    
+## 2     1     1     1 有人  死       有人 死      
+## 3     1     1     1 死    翘       死 翘        
+## 4     1     1     2 敲过  泉州     敲过 泉州    
+## 5     1     1     2 泉州  盛府     泉州 盛府    
+## 6     1     1     2 盛府  陆陆续续 盛府 陆陆续续</code></pre>
+<p>可以统计一下出现最多的二元组:</p>
+<pre class="r"><code>dat2 %&gt;%
+  count(bigram, sort = TRUE) %&gt;%
+  head(10)</code></pre>
+<pre><code>## # A tibble: 10 x 2
+##    bigram          n
+##    &lt;chr&gt;       &lt;int&gt;
+##  1 &lt;NA&gt;        12017
+##  2 丫鬟 婆子     109
+##  3 明兰 笑        72
+##  4 明兰 心头      61
+##  5 明兰 点点头    56
+##  6 明兰 微微      54
+##  7 明兰 忍不住    53
+##  8 明兰 一眼      53
+##  9 明兰 微笑      52
+## 10 明兰 轻轻      46</code></pre>
+<p>这里完全可以将<code>bigram</code>当作单个词，从而进行<code>tf-idf</code>等分析。操作流程和之前一样，就不再演示了。</p>
+<p>基于<code>dat2</code>数据，我们也可以生成一个网络。网络的节点是词，边代表两个词在一个<code>bigram</code>中出现过，而边的粗细可以代表共同出现的次数。由于<code>word1</code>和<code>word2</code>存在顺序关系，所以这里最好生成有向图。</p>
+<pre class="r"><code>bigram_graph &lt;- dat2 %&gt;%
+  filter(!is.na(word2)) %&gt;%
+  count(word1, word2, sort = TRUE) %&gt;%
+  slice_max(order_by = n, n = 50) %&gt;%
+  as_tbl_graph(directed = T)
+
+a &lt;- grid::arrow(type = &quot;closed&quot;, length = unit(2, &quot;mm&quot;))
+
+
+ggraph(bigram_graph, layout = &quot;fr&quot;) +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE, arrow = a,
+                 end_cap = circle(.1, &#39;inches&#39;)) +
+  geom_node_point(color = &quot;lightblue&quot;, size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-15"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-15-1.png" alt="词汇网络" width="672" />
+<p class="caption">
+Figure 5: 词汇网络
+</p>
+</div>
+<pre class="r"><code>rm(list = c(&quot;dat2&quot;))</code></pre>
+</div>
+<div id="五词的共现" class="section level1">
+<h1>五、词的共现</h1>
+<p>另一个比较有趣的探索，是查看哪些词更可能在同一句话中出现，并据此计算不同词之间的相关性。通过<code>widyr</code>包中的<code>pairwise_count</code>函数，我们可以轻松计算不同<code>word</code>在同一句话<code>id3</code>出现的次数，并按从大到小进行排列:</p>
+<pre class="r"><code>word_pairs &lt;- dat1 %&gt;%
+  group_by(word) %&gt;%
+  filter(n() &gt;= 200) %&gt;% # 这里排除一些低频词，要不然计算量太大了
+  ungroup() %&gt;%
+  widyr::pairwise_count(word, id3, sort = T)
+
+head(word_pairs)</code></pre>
+<pre><code>## # A tibble: 6 x 3
+##   item1  item2      n
+##   &lt;chr&gt;  &lt;chr&gt;  &lt;dbl&gt;
+## 1 顾廷烨 明兰     890
+## 2 明兰   顾廷烨   890
+## 3 明兰   老太太   576
+## 4 老太太 明兰     576
+## 5 明兰   笑       467
+## 6 笑     明兰     467</code></pre>
+<p>下面看一下和明兰最常出现在一个句话中的10个词：</p>
+<pre class="r"><code>word_pairs %&gt;%
+  filter(item1 == &quot;明兰&quot;) %&gt;%
+  head(10)</code></pre>
+<pre><code>## # A tibble: 10 x 3
+##    item1 item2      n
+##    &lt;chr&gt; &lt;chr&gt;  &lt;dbl&gt;
+##  1 明兰  顾廷烨   890
+##  2 明兰  老太太   576
+##  3 明兰  笑       467
+##  4 明兰  如兰     464
+##  5 明兰  王氏     413
+##  6 明兰  丹橘     366
+##  7 明兰  墨兰     344
+##  8 明兰  时       323
+##  9 明兰  倒       320
+## 10 明兰  罢       319</code></pre>
+<p>通过<code>widyr</code>包中的<code>pairwise_cor</code>函数，可以计算不同词在同一句话<code>id3</code>中出现的<span class="math inline">\(\phi\)</span>系数。该系数取值在0到1之间，取值越大，这两个词越倾向于在同一句话中出现。</p>
+<p>这是和盛紘相关性最强的十个人：</p>
+<pre class="r"><code>rm(list = c(&quot;word_pairs&quot;))
+
+word_cors &lt;- dat1 %&gt;%
+  group_by(word) %&gt;%
+  filter(n() &gt;= 200) %&gt;%
+  widyr::pairwise_cor(word, id3, sort = TRUE)
+
+word_cors %&gt;%
+  filter(item1 == &quot;盛紘&quot;) %&gt;% head(10)</code></pre>
+<pre><code>## # A tibble: 10 x 3
+##    item1 item2  correlation
+##    &lt;chr&gt; &lt;chr&gt;        &lt;dbl&gt;
+##  1 盛紘  王氏        0.207 
+##  2 盛紘  林姨娘      0.200 
+##  3 盛紘  长枫        0.119 
+##  4 盛紘  长柏        0.0924
+##  5 盛紘  老太太      0.0872
+##  6 盛紘  儿子        0.0738
+##  7 盛紘  盛家        0.0711
+##  8 盛紘  孔嬷嬷      0.0708
+##  9 盛紘  女儿        0.0669
+## 10 盛紘  墨兰        0.0640</code></pre>
+<p>下图则展现了与剧中六位人物相关性最强的6个词：</p>
+<pre class="r"><code>word_cors %&gt;%
+  filter(item1 %in% c(&quot;明兰&quot;, &quot;顾廷烨&quot;, &quot;盛紘&quot;, &quot;老太太&quot;, &quot;小桃&quot;, &quot;王氏&quot;)) %&gt;%
+  group_by(item1) %&gt;%
+  slice_max(correlation, n = 6) %&gt;%
+  ungroup() %&gt;%
+  mutate(item2 = reorder(item2, correlation)) %&gt;%
+  ggplot(aes(item2, correlation)) +
+  geom_bar(stat = &quot;identity&quot;) +
+  facet_wrap(~ item1, scales = &quot;free_y&quot;) +
+  labs(y = NULL, x = &quot;phi coefficient&quot;) + 
+  coord_flip()</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-20"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-20-1.png" alt="与六位人物相关性最强的几个词" width="672" />
+<p class="caption">
+Figure 6: 与六位人物相关性最强的几个词
+</p>
+</div>
+<p>同样,也可以用网络图来展现不同词的共现关系，并将共现的倾向（或者说<span class="math inline">\(\phi\)</span>系数映射到边的透明度上）。</p>
+<pre class="r"><code>word_cors %&gt;%
+  filter(correlation &gt; .08) %&gt;%
+  as_tbl_graph() %&gt;%
+  ggraph(layout = &quot;fr&quot;) +
+  geom_edge_link(aes(edge_alpha = correlation), show.legend = FALSE) +
+  geom_node_point(color = &quot;lightblue&quot;, size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_void()</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-21"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-21-1.png" alt="不同词的共现情况" width="672" />
+<p class="caption">
+Figure 7: 不同词的共现情况
+</p>
+</div>
+</div>

@@ -6,44 +6,38 @@
     <description>Recent content on Plumber&#39;s Website</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Tue, 01 Dec 2020 21:13:14 -0500</lastBuildDate><atom:link href="/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sun, 20 Mar 2022 00:00:00 +0000</lastBuildDate><atom:link href="/index.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title>Hello R Markdown</title>
-      <link>/2020/12/01/hello-r-markdown/</link>
-      <pubDate>Tue, 01 Dec 2020 21:13:14 -0500</pubDate>
+      <title>用R对《知否知否》进行文本分析(一)</title>
+      <link>/2022/03/20/2022/</link>
+      <pubDate>Sun, 20 Mar 2022 00:00:00 +0000</pubDate>
       
-      <guid>/2020/12/01/hello-r-markdown/</guid>
-      <description>R Markdown This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see http://rmarkdown.rstudio.com.
-You can embed an R code chunk like this:
-summary(cars) ## speed dist ## Min. : 4.0 Min. : 2.00 ## 1st Qu.:12.0 1st Qu.: 26.00 ## Median :15.0 Median : 36.00 ## Mean :15.4 Mean : 42.98 ## 3rd Qu.</description>
+      <guid>/2022/03/20/2022/</guid>
+      <description>本文所涉及的所有代码和文件参见：
+https://github.com/plumberDong/my_website/tree/main/content/post/2022-03-20-2022
+一、数据读取 除了jiebaR外，这里还用到了chinese.misc包，这是一个非常方便的中文分析辅助工具，相关指令参见Github。
+library(tidyverse) library(jiebaR) library(chinese.misc) library(showtext) library(knitr) library(ggsci) library(tidytext) library(ggraph) library(tidygraph) showtext_auto() 首先读取文本文档，转化成tibble格式，然后生成：
+ id1: 卷号 id2: 回号（每一卷开始重新计数） id3: 句子序号  # 读取后打散 dat &amp;lt;- scancn(&amp;quot;知否知否.txt&amp;quot;) dat &amp;lt;- str_split(dat, pattern = &amp;quot;\\s&amp;quot;)[[1]] # 去除空行，生成tibble dat &amp;lt;- dat[dat!=&amp;quot;&amp;quot;] %&amp;gt;% as_tibble() # 生成章\回\句号 dat &amp;lt;- dat %&amp;gt;% rename(text = value) %&amp;gt;% mutate(id1 = cumsum(str_detect(text, pattern = &amp;quot;^第.+卷|^最终卷&amp;quot;))) %&amp;gt;% group_by(id1) %&amp;gt;% mutate(id2 = cumsum(str_detect(text, pattern = &amp;quot;^第.+回&amp;quot;))) %&amp;gt;% filter(id2 != 0) %&amp;gt;% # 然后删除这些题目 filter(!</description>
     </item>
     
     <item>
-      <title>A Plain Markdown Post</title>
-      <link>/2016/12/30/a-plain-markdown-post/</link>
-      <pubDate>Fri, 30 Dec 2016 21:49:57 -0700</pubDate>
+      <title>Plot Venn Diagrams in R</title>
+      <link>/2022/03/18/plot-venn-diagrams-in-r/</link>
+      <pubDate>Fri, 18 Mar 2022 00:00:00 +0000</pubDate>
       
-      <guid>/2016/12/30/a-plain-markdown-post/</guid>
-      <description>This is a post written in plain Markdown (*.md) instead of R Markdown (*.Rmd). The major differences are:
- You cannot run any R code in a plain Markdown document, whereas in an R Markdown document, you can embed R code chunks (```{r}); A plain Markdown post is rendered through Blackfriday, and an R Markdown document is compiled by rmarkdown and Pandoc.  There are many differences in syntax between Blackfriday&amp;rsquo;s Markdown and Pandoc&amp;rsquo;s Markdown.</description>
+      <guid>/2022/03/18/plot-venn-diagrams-in-r/</guid>
+      <description>1 Introduction A Venn diagram is an illustration that uses circles to show the relationships among things or finite groups of things.
+In practice, It is helpful to observe set relations by Venn diagrams. This article will introduce some drawing methods in R.
+ 2 ggVennDiagram ggVennDiagram is developed by gaospecial. It maps the fill color of each region to quantity atuomatically. The scale_fill_gradient() in ggplot2 serves to adjust the color.</description>
     </item>
     
     <item>
-      <title>About</title>
+      <title>关于我</title>
       <link>/about/</link>
-      <pubDate>Thu, 05 May 2016 21:48:51 -0700</pubDate>
+      <pubDate>Fri, 18 Mar 2022 00:00:00 +0000</pubDate>
       
       <guid>/about/</guid>
-      <description>This is a &amp;ldquo;hello world&amp;rdquo; example website for the blogdown package. The theme was forked from @jrutheiser/hugo-lithium-theme and modified by Yihui Xie.</description>
-    </item>
-    
-    <item>
-      <title>Lorem Ipsum</title>
-      <link>/2015/01/01/lorem-ipsum/</link>
-      <pubDate>Thu, 01 Jan 2015 13:09:13 -0600</pubDate>
-      
-      <guid>/2015/01/01/lorem-ipsum/</guid>
-      <description>空白</description>
+      <description>记录个人的学习和生活。</description>
     </item>
     
   </channel>
