@@ -111,7 +111,7 @@ Figure 1: 出现频次最高的十个词
 </div>
 <div id="二情感分析" class="section level1">
 <h1>二、情感分析</h1>
-<p>情感分析的核心逻辑扎根于词频，主要是基于我们定义的一些积极/消极词汇库，对包含这些词的文章段落进行赋分，最终计算出情感得分（当然，也有基于深度学习的更复杂的情感大粉工具，百度平台提供了一些相应的API，但这里没有涉及）。</p>
+<p>情感分析的核心逻辑扎根于词频，主要是基于我们定义的一些积极/消极词汇库，对包含这些词的文章段落进行赋分，最终计算出情感得分（当然，也有基于深度学习的更复杂的情感打分工具，百度平台提供了一些相应的<a href="https://ai.baidu.com/tech/nlp_apply/sentiment_classify">API</a>，但这里没有涉及）。</p>
 <p>首先读取正面、负面词库</p>
 <pre class="r"><code>positive_words &lt;- read_lines(&quot;NTUSD_positive_simplified.txt&quot;)
 negative_words &lt;- read_lines(&quot;NTUSD_negative_simplified.txt&quot;)</code></pre>
@@ -363,7 +363,7 @@ word_cors %&gt;%
 Figure 6: 与六位人物相关性最强的几个词
 </p>
 </div>
-<p>同样,也可以用网络图来展现不同词的共现关系，并将共现的倾向（或者说<span class="math inline">\(\phi\)</span>系数映射到边的透明度上）。</p>
+<p>同样,也可以用网络图来展现不同词的共现关系，并将共现的倾向（或者说<span class="math inline">\(\phi\)</span>系数)映射到边的透明度上。</p>
 <pre class="r"><code>word_cors %&gt;%
   filter(correlation &gt; .08) %&gt;%
   as_tbl_graph() %&gt;%
