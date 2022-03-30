@@ -1,0 +1,124 @@
+---
+title: 'Excess mortality in China during COVID-19(2021)'
+author: Plumber
+date: '2022-03-27'
+slug: covid19
+categories:
+  - study
+tags: ['Covid-19']
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+pacman::p_load(tidyverse, fpp2)
+```
+
+
+# Background
+
+The Covid-19 global pandemic is a serious crisis for the whole world. According to [WHO](https://covid19.who.int/), more than six million people have died from it to date. 
+
+Compared with other countries, China adopted most extensive and stringent containment measures, and thereby fewer people died from it directly. However, the confirmed COVID-19 death count is not a comprehensive measure of the total impact of the pandemic because it may be affected by some well known biases.
+
+# Excess Mortality
+
+**This article aims to calculate the excess mortality in China in 2021** to measure the total effect of the pandemic in 2021.
+
+*Excess mortality* refers to the number of deaths reported during the COVID-19 pandemic compares to the deaths we would have expected had the pandemic not occurred:
+
+$$
+\text{excess deaths}_{2021} = \text{reported deaths}_{2021} - \text{expected deaths}_{2021} \tag{1}
+$$
+
+# Data and Measures
+
+Building a model to estimate the *expected deaths* in 2021 requires annual death numbers in previous years. However, [China's National Bureau of Statistics](https://data.stats.gov.cn/easyquery.htm?cn=C01) has not reported them online. 
+
+For this reason, I turn to estimate the *reported deaths* based on *total population at the year-end* and *death rate* which have been published by them.
+
+I calculate the *reported deaths* in $year_t$ as:
+
+$$
+\begin{aligned}
+\text{reported deaths}_t &= \text{averge total population}_t \times \text{death rate}_t \\
+& = \dfrac{\text{total population}_t + \text{total population}_{t-1}}{2} \times \text{death rate}_t
+\end{aligned} \tag{2}
+$$
+
+The first line of equation 2 is a formula provided by CBNC. Because the *average total population* is unknown either, I use the mean of the total population at the end and the beginning of the year instead.
+
+# Results
+
+Figure 1 shows the the reported deaths(eatimated) from all causes. Obviously, the reported deaths in 2021 experienced a unusual increase of about 164,268, which is much larger than the confirmed COVID-19 death count that year.
+
+```{r fig.align="center", fig.cap="The reported deaths(from all causes)", message=FALSE, warning=FALSE}
+dat <- read_csv("dat.csv") %>%
+  mutate(pop_avg = slider::slide_dbl(pop_end, mean, .before = 1)) %>%
+  slice(-1) %>%
+  mutate(death_num = pop_avg * death_rate / 1e3)
+
+
+dat %>%
+  pivot_longer(cols = c(pop_avg, death_num)) %>%
+  mutate(name = recode(name, "death_num" = "reported deaths", "pop_avg" = "average total population")) %>%
+  ggplot(aes(x = year, y = value, color = name)) + 
+  geom_point() + 
+  geom_line() + 
+  xlab("Year") +
+  ylab("1e4") +
+  guides(color = "none") + 
+  facet_wrap(~name, scales = "free_y", nrow = 2) + 
+  scale_x_continuous(breaks = seq(2002, 2021, 3)) + 
+  geom_vline(xintercept = 2020, color = "grey")
+```
+
+To calculate *excess mortality*, we need the *expected deaths* in 2021. I use a type of exponential smoothing methods proposed by [Gardner & McKenzie](https://pubsonline.informs.org/doi/abs/10.1287/mnsc.31.10.1237) to predict it.
+
+The point forecast of excess mortality is $13.6 \times 10^4$, which is the real impact of the pandemic in 2021:
+
+```{r}
+dat[,"death_num"] %>%
+  ts(start = 2002, frequency = 1) %>%
+  window(end = 2020) %>%
+  holt(damped=TRUE, phi = 0.9, h = 1) %>%
+  as_tibble() %>%
+  mutate_all(~dat[[20,"death_num"]] - .) %>%
+  flextable::flextable() %>% 
+  flextable::colformat_num(digits = 2) 
+```
+
+# Robustness
+
+Is our estimation of *expected deaths* precise enough? We can evaluate the forecast accuracy by looking whether the model fits well in previous years.
+
+In Figure 2, the red and blue curves represent expected and reported deaths respectively. The accuracy of our model appears pretty well since 2009 and it is exactly in 2021 a large residual pops out.
+
+```{r fig.align="center", fig.cap="Reported deaths and expected deaths", message=FALSE, warning=FALSE}
+fit_exp <- dat[,"death_num"] %>%
+  ts(start = 2002, frequency = 1) %>%
+  holt(damped=TRUE, phi = 0.9)
+
+fit_exp <- fit_exp$fitted
+
+dat <- dat %>%
+  mutate(fit = as.vector(fit_exp))
+
+dat %>%
+  pivot_longer(cols = c(death_num, fit)) %>%
+  mutate(name = recode(name, "death_num" = "reported deaths", "fit" = "expected deaths")) %>%
+  ggplot(aes(x = year, y = value, color = name)) + 
+  geom_point() + 
+  geom_line() + 
+  xlab("Year") +
+  ylab("1e4") +
+  guides(color = "none") + 
+  scale_x_continuous(breaks = seq(2002, 2021, 3)) + 
+  geom_vline(xintercept = 2020, color = "grey")
+```
+
+
+
+
+
+
+
+

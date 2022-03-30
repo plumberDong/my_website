@@ -1,0 +1,160 @@
+---
+title: 'Excess mortality in China during COVID-19(2021)'
+author: Plumber
+date: '2022-03-27'
+slug: covid19
+categories:
+  - study
+tags: ['Covid-19']
+---
+
+<link href="{{< blogdown/postref >}}index_files/tabwid/tabwid.css" rel="stylesheet" />
+
+
+<div id="background" class="section level1">
+<h1>Background</h1>
+<p>The Covid-19 global pandemic is a serious crisis for the whole world. According to <a href="https://covid19.who.int/">WHO</a>, more than six million people have died from it to date.</p>
+<p>Compared with other countries, China adopted most extensive and stringent containment measures, and thereby fewer people died from it directly. However, the confirmed COVID-19 death count is not a comprehensive measure of the total impact of the pandemic because it may be affected by some well known biases.</p>
+</div>
+<div id="excess-mortality" class="section level1">
+<h1>Excess Mortality</h1>
+<p><strong>This article aims to calculate the excess mortality in China in 2021</strong> to measure the total effect of the pandemic in 2021.</p>
+<p><em>Excess mortality</em> refers to the number of deaths reported during the COVID-19 pandemic compares to the deaths we would have expected had the pandemic not occurred:</p>
+<p><span class="math display">\[
+\text{excess deaths}_{2021} = \text{reported deaths}_{2021} - \text{expected deaths}_{2021} \tag{1}
+\]</span></p>
+</div>
+<div id="data-and-measures" class="section level1">
+<h1>Data and Measures</h1>
+<p>Building a model to estimate the <em>expected deaths</em> in 2021 requires annual death numbers in previous years. However, <a href="https://data.stats.gov.cn/easyquery.htm?cn=C01">China’s National Bureau of Statistics</a> has not reported them online.</p>
+<p>For this reason, I turn to estimate the <em>reported deaths</em> based on <em>total population at the year-end</em> and <em>death rate</em> which have been published by them.</p>
+<p>I calculate the <em>reported deaths</em> in <span class="math inline">\(year_t\)</span> as:</p>
+<p><span class="math display">\[
+\begin{aligned}
+\text{reported deaths}_t &amp;= \text{averge total population}_t \times \text{death rate}_t \\
+&amp; = \dfrac{\text{total population}_t + \text{total population}_{t-1}}{2} \times \text{death rate}_t
+\end{aligned} \tag{2}
+\]</span></p>
+<p>The first line of equation 2 is a formula provided by CBNC. Because the <em>average total population</em> is unknown either, I use the mean of the total population at the end and the beginning of the year instead.</p>
+</div>
+<div id="results" class="section level1">
+<h1>Results</h1>
+<p>Figure 1 shows the the reported deaths(eatimated) from all causes. Obviously, the reported deaths in 2021 experienced a unusual increase of about 164,268, which is much larger than the confirmed COVID-19 death count that year.</p>
+<pre class="r"><code>dat &lt;- read_csv(&quot;dat.csv&quot;) %&gt;%
+  mutate(pop_avg = slider::slide_dbl(pop_end, mean, .before = 1)) %&gt;%
+  slice(-1) %&gt;%
+  mutate(death_num = pop_avg * death_rate / 1e3)
+
+
+dat %&gt;%
+  pivot_longer(cols = c(pop_avg, death_num)) %&gt;%
+  mutate(name = recode(name, &quot;death_num&quot; = &quot;reported deaths&quot;, &quot;pop_avg&quot; = &quot;average total population&quot;)) %&gt;%
+  ggplot(aes(x = year, y = value, color = name)) + 
+  geom_point() + 
+  geom_line() + 
+  xlab(&quot;Year&quot;) +
+  ylab(&quot;1e4&quot;) +
+  guides(color = &quot;none&quot;) + 
+  facet_wrap(~name, scales = &quot;free_y&quot;, nrow = 2) + 
+  scale_x_continuous(breaks = seq(2002, 2021, 3)) + 
+  geom_vline(xintercept = 2020, color = &quot;grey&quot;)</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-2"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-2-1.png" alt="The reported deaths(from all causes)" width="672" />
+<p class="caption">
+Figure 1: The reported deaths(from all causes)
+</p>
+</div>
+<p>To calculate <em>excess mortality</em>, we need the <em>expected deaths</em> in 2021. I use a type of exponential smoothing methods proposed by <a href="https://pubsonline.informs.org/doi/abs/10.1287/mnsc.31.10.1237">Gardner &amp; McKenzie</a> to predict it.</p>
+<p>The point forecast of excess mortality is <span class="math inline">\(13.6 \times 10^4\)</span>, which is the real impact of the pandemic in 2021:</p>
+<pre class="r"><code>dat[,&quot;death_num&quot;] %&gt;%
+  ts(start = 2002, frequency = 1) %&gt;%
+  window(end = 2020) %&gt;%
+  holt(damped=TRUE, phi = 0.9, h = 1) %&gt;%
+  as_tibble() %&gt;%
+  mutate_all(~dat[[20,&quot;death_num&quot;]] - .) %&gt;%
+  flextable::flextable() %&gt;% 
+  flextable::colformat_num(digits = 2) </code></pre>
+<template id="1f220c6f-f516-4fd0-94f4-a12f910b3691"><style>
+.tabwid table{
+  border-spacing:0px !important;
+  border-collapse:collapse;
+  line-height:1;
+  margin-left:auto;
+  margin-right:auto;
+  border-width: 0;
+  display: table;
+  margin-top: 1.275em;
+  margin-bottom: 1.275em;
+  border-color: transparent;
+}
+.tabwid_left table{
+  margin-left:0;
+}
+.tabwid_right table{
+  margin-right:0;
+}
+.tabwid td {
+    padding: 0;
+}
+.tabwid a {
+  text-decoration: none;
+}
+.tabwid thead {
+    background-color: transparent;
+}
+.tabwid tfoot {
+    background-color: transparent;
+}
+.tabwid table tr {
+background-color: transparent;
+}
+</style><div class="tabwid"><style>.cl-ebe4d488{}.cl-ebd9f900{font-family:'Helvetica';font-size:11pt;font-weight:normal;font-style:normal;text-decoration:none;color:rgba(0, 0, 0, 1.00);background-color:transparent;}.cl-ebda1b92{margin:0;text-align:right;border-bottom: 0 solid rgba(0, 0, 0, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);padding-bottom:5pt;padding-top:5pt;padding-left:5pt;padding-right:5pt;line-height: 1;background-color:transparent;}.cl-ebda64e4{width:54pt;background-color:transparent;vertical-align: middle;border-bottom: 2pt solid rgba(102, 102, 102, 1.00);border-top: 0 solid rgba(0, 0, 0, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}.cl-ebda6516{width:54pt;background-color:transparent;vertical-align: middle;border-bottom: 2pt solid rgba(102, 102, 102, 1.00);border-top: 2pt solid rgba(102, 102, 102, 1.00);border-left: 0 solid rgba(0, 0, 0, 1.00);border-right: 0 solid rgba(0, 0, 0, 1.00);margin-bottom:0;margin-top:0;margin-left:0;margin-right:0;}</style><table class='cl-ebe4d488'>
+<thead><tr style="overflow-wrap:break-word;"><td class="cl-ebda6516"><p class="cl-ebda1b92"><span class="cl-ebd9f900">Point Forecast</span></p></td><td class="cl-ebda6516"><p class="cl-ebda1b92"><span class="cl-ebd9f900">Lo 80</span></p></td><td class="cl-ebda6516"><p class="cl-ebda1b92"><span class="cl-ebd9f900">Hi 80</span></p></td><td class="cl-ebda6516"><p class="cl-ebda1b92"><span class="cl-ebd9f900">Lo 95</span></p></td><td class="cl-ebda6516"><p class="cl-ebda1b92"><span class="cl-ebd9f900">Hi 95</span></p></td></tr></thead><tbody><tr style="overflow-wrap:break-word;"><td class="cl-ebda64e4"><p class="cl-ebda1b92"><span class="cl-ebd9f900">13.55887</span></p></td><td class="cl-ebda64e4"><p class="cl-ebda1b92"><span class="cl-ebd9f900">27.00892</span></p></td><td class="cl-ebda64e4"><p class="cl-ebda1b92"><span class="cl-ebd9f900">0.10883</span></p></td><td class="cl-ebda64e4"><p class="cl-ebda1b92"><span class="cl-ebd9f900">34.12894</span></p></td><td class="cl-ebda64e4"><p class="cl-ebda1b92"><span class="cl-ebd9f900">-7.011193</span></p></td></tr></tbody></table></div></template>
+<div class="flextable-shadow-host" id="8beecf47-0300-465b-bab6-3299da01bc8c"></div>
+<script>
+var dest = document.getElementById("8beecf47-0300-465b-bab6-3299da01bc8c");
+var template = document.getElementById("1f220c6f-f516-4fd0-94f4-a12f910b3691");
+var caption = template.content.querySelector("caption");
+if(caption) {
+  caption.style.cssText = "display:block;text-align:center;";
+  var newcapt = document.createElement("p");
+  newcapt.appendChild(caption)
+  dest.parentNode.insertBefore(newcapt, dest.previousSibling);
+}
+var fantome = dest.attachShadow({mode: 'open'});
+var templateContent = template.content;
+fantome.appendChild(templateContent);
+</script>
+
+</div>
+<div id="robustness" class="section level1">
+<h1>Robustness</h1>
+<p>Is our estimation of <em>expected deaths</em> precise enough? We can evaluate the forecast accuracy by looking whether the model fits well in previous years.</p>
+<p>In Figure 2, the red and blue curves represent expected and reported deaths respectively. The accuracy of our model appears pretty well since 2009 and it is exactly in 2021 a large residual pops out.</p>
+<pre class="r"><code>fit_exp &lt;- dat[,&quot;death_num&quot;] %&gt;%
+  ts(start = 2002, frequency = 1) %&gt;%
+  holt(damped=TRUE, phi = 0.9)
+
+fit_exp &lt;- fit_exp$fitted
+
+dat &lt;- dat %&gt;%
+  mutate(fit = as.vector(fit_exp))
+
+dat %&gt;%
+  pivot_longer(cols = c(death_num, fit)) %&gt;%
+  mutate(name = recode(name, &quot;death_num&quot; = &quot;reported deaths&quot;, &quot;fit&quot; = &quot;expected deaths&quot;)) %&gt;%
+  ggplot(aes(x = year, y = value, color = name)) + 
+  geom_point() + 
+  geom_line() + 
+  xlab(&quot;Year&quot;) +
+  ylab(&quot;1e4&quot;) +
+  guides(color = &quot;none&quot;) + 
+  scale_x_continuous(breaks = seq(2002, 2021, 3)) + 
+  geom_vline(xintercept = 2020, color = &quot;grey&quot;)</code></pre>
+<div class="figure" style="text-align: center"><span style="display:block;" id="fig:unnamed-chunk-4"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-4-1.png" alt="Reported deaths and expected deaths" width="672" />
+<p class="caption">
+Figure 2: Reported deaths and expected deaths
+</p>
+</div>
+</div>

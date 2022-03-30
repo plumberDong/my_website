@@ -1,0 +1,30 @@
+---
+title: "stem"
+author: "plumber"
+date: "3/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(hcandersenr, tidyverse, tidytext, stopwords, SnowballC)
+```
+
+```{r}
+fir_tree <- hca_fairytales() %>%
+  filter(book == "The fir tree",
+         language == "English")
+
+tidy_fir_tree <- fir_tree %>%
+  unnest_tokens(word, text) %>%
+  anti_join(get_stopwords(source = "snowball"))
+
+tidy_fir_tree %>%
+  mutate(stem = wordStem(word)) %>%
+  count(stem, sort = TRUE) %>%
+  filter(str_detect(stem, "^tree"))
+```
+
