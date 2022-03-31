@@ -90,7 +90,7 @@ dat[,"death_num"] %>%
 
 Is our estimation of *expected deaths* precise enough? We can evaluate the forecast accuracy by looking whether the exponential smoothing fits well in previous years.
 
-In Figure 2, the red and blue curves represent one-step-ahead expected deaths and reported deaths respectively. And the blue area shows a 0.8 confidence interval. The accuracy of our model appears pretty well since 2010 and it is exactly in 2021 a large residual pops out.
+In Figure 2, the blue and red curves represent one-step-ahead expected deaths and reported deaths respectively. And the blue area shows a 0.8 confidence interval. The accuracy of our model appears pretty well since 2010 and it is exactly in 2021 a large residual pops out.
 
 
 
